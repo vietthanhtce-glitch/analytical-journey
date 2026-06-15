@@ -8,16 +8,19 @@ from streamlit_lottie import st_lottie
 # --- CÀI ĐẶT TRANG ---
 st.set_page_config(page_title="The Analytical Journey", page_icon="🗡️", layout="centered")
 
-# --- HÀM TẢI ẢNH ĐỘNG (LOTTIE) ---
+# --- HÀM TẢI ẢNH ĐỘNG (LOTTIE) CÓ BẢO VỆ CHỐNG LỖI ---
 def load_lottieurl(url: str):
-    r = requests.get(url)
-    if r.status_code != 200:
+    try:
+        r = requests.get(url, timeout=5)
+        if r.status_code != 200:
+            return None
+        return r.json()
+    except:
         return None
-    return r.json()
 
-# Link ảnh động (có thể thay thế bằng link khác từ lottiefiles.com)
-lottie_wizard = load_lottieurl("https://lottie.host/80540450-48b4-4b11-a8ee-fdf4e9a1801c/S71N24QYpK.json")
-lottie_castle = load_lottieurl("https://lottie.host/5b55de17-3843-42e6-a052-a5d625d3dfae/hBw1LCLrU0.json")
+# Link ảnh động mới (đã được cập nhật link ổn định hơn)
+lottie_wizard = load_lottieurl("https://assets9.lottiefiles.com/packages/lf20_x1gjdldi.json") 
+lottie_castle = load_lottieurl("https://assets3.lottiefiles.com/packages/lf20_1yuvkgwz.json")
 
 # --- SIDEBAR: NHẬP API KEY ---
 with st.sidebar:
@@ -31,7 +34,7 @@ with st.sidebar:
 if 'stage' not in st.session_state:
     st.session_state.stage = 0
     st.session_state.topic = ""
-    st.session_state.roles = {} # Lưu trữ vai diễn tự động
+    st.session_state.roles = {} 
     st.session_state.micro_ans = ""
     st.session_state.micro_fb = ""
     st.session_state.meso_ans = ""
@@ -88,14 +91,17 @@ st.markdown("*An AI-Driven RPG for Idea Generation (IELTS Writing Task 2)*")
 st.divider()
 
 if not api_key:
-    st.warning("⚠️ Vui lòng nhập API Key ở thanh bên trái để bắt đầu trò chơi.")
+    st.warning("⚠️ Please enter your Gemini API Key in the sidebar to start.")
     st.stop()
 
 # ==========================================
 # TRẠM 0: NHẬP ĐỀ & TẠO VAI DIỄN (INIT)
 # ==========================================
 if st.session_state.stage == 0:
-    st_lottie(lottie_wizard, height=200, key="wizard_init")
+    # KIỂM TRA TRƯỚC KHI HIỂN THỊ ẢNH ĐỂ TRÁNH LỖI
+    if lottie_wizard:
+        st_lottie(lottie_wizard, height=200, key="wizard_init")
+        
     st.info("👋 **[Game Master]:** Welcome traveler! Provide the magical scroll (IELTS Topic) you wish to decode.")
     topic_input = st.text_area("Enter IELTS Writing Task 2 Topic:", height=100)
     
@@ -109,7 +115,7 @@ if st.session_state.stage == 0:
                     st.session_state.stage = 1
                     st.rerun()
                 else:
-                    st.error("Lỗi khi kết nối AI. Vui lòng thử lại!")
+                    st.error("Error connecting to AI. Please try again!")
         else:
             st.warning("Bạn cần nhập đề bài!")
 
@@ -205,7 +211,11 @@ elif st.session_state.stage == 3.5:
 # ==========================================
 elif st.session_state.stage == 4:
     st.balloons()
-    st_lottie(lottie_castle, height=250, key="castle_end")
+    
+    # KIỂM TRA TRƯỚC KHI HIỂN THỊ ẢNH ĐỂ TRÁNH LỖI
+    if lottie_castle:
+        st_lottie(lottie_castle, height=250, key="castle_end")
+        
     st.header("💎 The Treasure Board")
     
     st.info("Game Master is forging your fragments into a master outline...")
