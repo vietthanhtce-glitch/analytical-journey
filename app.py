@@ -1,128 +1,237 @@
 import streamlit as st
 import google.generativeai as genai
+import json
+import re
+import requests
+from streamlit_lottie import st_lottie
 
 # --- CÀI ĐẶT TRANG ---
 st.set_page_config(page_title="The Analytical Journey", page_icon="🗡️", layout="centered")
 
+# --- HÀM TẢI ẢNH ĐỘNG (LOTTIE) ---
+def load_lottieurl(url: str):
+    r = requests.get(url)
+    if r.status_code != 200:
+        return None
+    return r.json()
+
+# Link ảnh động (có thể thay thế bằng link khác từ lottiefiles.com)
+lottie_wizard = load_lottieurl("https://lottie.host/80540450-48b4-4b11-a8ee-fdf4e9a1801c/S71N24QYpK.json")
+lottie_castle = load_lottieurl("https://lottie.host/5b55de17-3843-42e6-a052-a5d625d3dfae/hBw1LCLrU0.json")
+
 # --- SIDEBAR: NHẬP API KEY ---
 with st.sidebar:
-    st.header("⚙️ Cấu hình Game Master (AI)")
-    api_key = st.text_input("Nhập Gemini API Key của bạn vào đây:", type="password")
-    st.markdown("*Lấy API key miễn phí tại [Google AI Studio](https://aistudio.google.com/)*")
+    st.header("⚙️ Cấu hình Game Master")
+    api_key = st.text_input("Enter Gemini API Key:", type="password")
     if api_key:
         genai.configure(api_key=api_key)
-        st.success("Đã kết nối AI thành công!")
+        st.success("AI Connected Successfully!")
 
 # --- KHỞI TẠO SESSION STATE ---
 if 'stage' not in st.session_state:
     st.session_state.stage = 0
     st.session_state.topic = ""
+    st.session_state.roles = {} # Lưu trữ vai diễn tự động
     st.session_state.micro_ans = ""
+    st.session_state.micro_fb = ""
     st.session_state.meso_ans = ""
+    st.session_state.meso_fb = ""
     st.session_state.macro_ans = ""
+    st.session_state.macro_fb = ""
 
 def reset_game():
     st.session_state.stage = 0
     st.session_state.topic = ""
-    st.session_state.micro_ans = ""
-    st.session_state.meso_ans = ""
-    st.session_state.macro_ans = ""
+    st.session_state.roles = {}
+    for key in ['micro_ans', 'micro_fb', 'meso_ans', 'meso_fb', 'macro_ans', 'macro_fb']:
+        st.session_state[key] = ""
+
+# --- HÀM GỌI AI ---
+def get_dynamic_roles(topic):
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    prompt = f"""
+    You are the Game Master of an RPG for IELTS Writing Task 2 idea generation.
+    The topic is: "{topic}"
+    
+    Create 3 RPG roles and 1 specific guiding question for each role to help the user brainstorm. The output MUST be in English and formatted EXACTLY as a JSON object.
+    
+    Roles:
+    1. Micro: An individual directly affected (e.g., consumer, student).
+    2. Meso: An organizational leader (e.g., school principal, CEO).
+    3. Macro: A societal observer or policymaker (e.g., government minister, sociologist).
+    
+    JSON Format:
+    {{
+        "micro": {{"role": "[Role name]", "question": "[Specific question]"}},
+        "meso": {{"role": "[Role name]", "question": "[Specific question]"}},
+        "macro": {{"role": "[Role name]", "question": "[Specific question]"}}
+    }}
+    """
+    response = model.generate_content(prompt)
+    match = re.search(r'\{.*\}', response.text, re.DOTALL)
+    if match:
+        return json.loads(match.group(0))
+    return None
+
+def get_ai_feedback(role, answer):
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    prompt = f"""
+    You are an encouraging Game Master. The user just answered a question from the perspective of a {role}.
+    Their answer: "{answer}"
+    Provide a very short (2-3 sentences) encouraging feedback in English. Validate their idea, praise their critical thinking, and award them an imaginary item (e.g., 'Fragment of Empathy'). Keep it enthusiastic.
+    """
+    return model.generate_content(prompt).text
 
 # --- GIAO DIỆN CHÍNH ---
 st.title("🗡️ The Analytical Journey")
 st.markdown("*An AI-Driven RPG for Idea Generation (IELTS Writing Task 2)*")
 st.divider()
 
+if not api_key:
+    st.warning("⚠️ Vui lòng nhập API Key ở thanh bên trái để bắt đầu trò chơi.")
+    st.stop()
+
 # ==========================================
-# TRẠM 0, 1, 2, 3: (Giữ nguyên logic như cũ)
+# TRẠM 0: NHẬP ĐỀ & TẠO VAI DIỄN (INIT)
 # ==========================================
 if st.session_state.stage == 0:
-    st.info("👋 Chào mừng lữ khách! Hãy cung cấp cuộn giấy phép thuật (Đề bài IELTS) mà bạn muốn giải mã.")
-    topic_input = st.text_area("Nhập đề bài IELTS Writing Task 2:", height=100)
-    if st.button("🚀 Bắt đầu Hành trình"):
+    st_lottie(lottie_wizard, height=200, key="wizard_init")
+    st.info("👋 **[Game Master]:** Welcome traveler! Provide the magical scroll (IELTS Topic) you wish to decode.")
+    topic_input = st.text_area("Enter IELTS Writing Task 2 Topic:", height=100)
+    
+    if st.button("🚀 Begin the Journey"):
         if topic_input:
-            st.session_state.topic = topic_input
-            st.session_state.stage = 1
-            st.rerun()
+            with st.spinner("Game Master is analyzing the realm and assigning your roles..."):
+                roles = get_dynamic_roles(topic_input)
+                if roles:
+                    st.session_state.roles = roles
+                    st.session_state.topic = topic_input
+                    st.session_state.stage = 1
+                    st.rerun()
+                else:
+                    st.error("Lỗi khi kết nối AI. Vui lòng thử lại!")
         else:
-            st.warning("Bạn cần nhập đề bài để bắt đầu!")
-
-elif st.session_state.stage == 1:
-    st.subheader("🏕️ Trạm 1: The Micro Village")
-    st.write(f"**Đề bài:** *{st.session_state.topic}*")
-    st.success("**[Game Master]:** Chào lữ khách! Xuyên không thành một công dân bình thường (người dùng, học sinh...). Điều gì đang xảy ra với cá nhân bạn? Bạn được gì, mất gì?")
-    micro = st.text_area("Nhập vai và trả lời:", height=150)
-    if st.button("🧩 Nhận 'Mảnh ghép Tâm lý'"):
-        if micro:
-            st.session_state.micro_ans = micro
-            st.session_state.stage = 2
-            st.rerun()
-
-elif st.session_state.stage == 2:
-    st.subheader("🏛️ Trạm 2: The Meso Guild")
-    st.write(f"**Đề bài:** *{st.session_state.topic}*")
-    st.success("**[Game Master]:** Bạn đã thăng cấp thành Trưởng hội! Tổ chức/Doanh nghiệp của bạn cung cấp giải pháp gì, đối mặt thách thức nào và kiếm lợi ra sao từ việc này?")
-    meso = st.text_area("Nhập vai và trả lời:", height=150)
-    if st.button("⚙️ Nhận 'Mảnh ghép Vận hành'"):
-        if meso:
-            st.session_state.meso_ans = meso
-            st.session_state.stage = 3
-            st.rerun()
-
-elif st.session_state.stage == 3:
-    st.subheader("🏰 Trạm 3: The Macro Kingdom")
-    st.write(f"**Đề bài:** *{st.session_state.topic}*")
-    st.success("**[Game Master]:** Thưa Bộ trưởng, ngài nhìn nhận sự việc này ảnh hưởng thế nào đến toàn vương quốc (kinh tế, môi trường, chính sách)?")
-    macro = st.text_area("Nhập vai và trả lời:", height=150)
-    if st.button("👑 Nhận 'Mảnh ghép Chính sách'"):
-        if macro:
-            st.session_state.macro_ans = macro
-            st.session_state.stage = 4
-            st.rerun()
+            st.warning("Bạn cần nhập đề bài!")
 
 # ==========================================
-# ĐÍCH ĐẾN: THE TREASURE BOARD (TÍCH HỢP AI)
+# TRẠM 1: MICRO VILLAGE
+# ==========================================
+elif st.session_state.stage == 1:
+    st.subheader("🏕️ Stage 1: The Micro Village")
+    st.caption(f"**Topic:** {st.session_state.topic}")
+    
+    role = st.session_state.roles['micro']['role']
+    question = st.session_state.roles['micro']['question']
+    
+    st.success(f"**[Game Master]:** You have transformed into a **{role}**.\n\n*\"{question}\"*")
+    
+    ans = st.text_area("Play your role and answer (in English):", height=150)
+    
+    if st.button("Submit & Listen to Game Master"):
+        if ans:
+            with st.spinner("Game Master is reading your mind..."):
+                st.session_state.micro_ans = ans
+                st.session_state.micro_fb = get_ai_feedback(role, ans)
+                st.session_state.stage = 1.5
+                st.rerun()
+
+elif st.session_state.stage == 1.5:
+    st.subheader("🏕️ Stage 1: The Micro Village")
+    st.info(f"**[Game Master]:** {st.session_state.micro_fb}")
+    if st.button("Proceed to The Meso Guild ➡️"):
+        st.session_state.stage = 2
+        st.rerun()
+
+# ==========================================
+# TRẠM 2: MESO GUILD
+# ==========================================
+elif st.session_state.stage == 2:
+    st.subheader("🏛️ Stage 2: The Meso Guild")
+    st.caption(f"**Topic:** {st.session_state.topic}")
+    
+    role = st.session_state.roles['meso']['role']
+    question = st.session_state.roles['meso']['question']
+    
+    st.success(f"**[Game Master]:** You have leveled up to a **{role}**.\n\n*\"{question}\"*")
+    
+    ans = st.text_area("Play your role and answer (in English):", height=150)
+    
+    if st.button("Submit & Listen to Game Master"):
+        if ans:
+            with st.spinner("Game Master is analyzing your strategy..."):
+                st.session_state.meso_ans = ans
+                st.session_state.meso_fb = get_ai_feedback(role, ans)
+                st.session_state.stage = 2.5
+                st.rerun()
+
+elif st.session_state.stage == 2.5:
+    st.subheader("🏛️ Stage 2: The Meso Guild")
+    st.info(f"**[Game Master]:** {st.session_state.meso_fb}")
+    if st.button("Proceed to The Macro Kingdom ➡️"):
+        st.session_state.stage = 3
+        st.rerun()
+
+# ==========================================
+# TRẠM 3: MACRO KINGDOM
+# ==========================================
+elif st.session_state.stage == 3:
+    st.subheader("🏰 Stage 3: The Macro Kingdom")
+    st.caption(f"**Topic:** {st.session_state.topic}")
+    
+    role = st.session_state.roles['macro']['role']
+    question = st.session_state.roles['macro']['question']
+    
+    st.success(f"**[Game Master]:** Welcome to the throne room. You are now a **{role}**.\n\n*\"{question}\"*")
+    
+    ans = st.text_area("Play your role and answer (in English):", height=150)
+    
+    if st.button("Submit & Listen to Game Master"):
+        if ans:
+            with st.spinner("Game Master is pondering your global vision..."):
+                st.session_state.macro_ans = ans
+                st.session_state.macro_fb = get_ai_feedback(role, ans)
+                st.session_state.stage = 3.5
+                st.rerun()
+
+elif st.session_state.stage == 3.5:
+    st.subheader("🏰 Stage 3: The Macro Kingdom")
+    st.info(f"**[Game Master]:** {st.session_state.macro_fb}")
+    if st.button("Unlock The Treasure Board 💎"):
+        st.session_state.stage = 4
+        st.rerun()
+
+# ==========================================
+# ĐÍCH ĐẾN: THE TREASURE BOARD
 # ==========================================
 elif st.session_state.stage == 4:
     st.balloons()
+    st_lottie(lottie_castle, height=250, key="castle_end")
     st.header("💎 The Treasure Board")
     
-    if not api_key:
-        st.error("⚠️ Bạn cần nhập Gemini API Key ở thanh bên trái (Sidebar) để Game Master có thể rèn đúc Dàn ý!")
-        if st.button("🔄 Bắt đầu lại"):
-            reset_game()
-            st.rerun()
-    else:
-        st.info("Game Master đang dùng phép thuật AI để tổng hợp các mảnh ghép của bạn...")
-        
-        # Gọi Gemini AI
-        try:
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            prompt = f"""
-            Bạn là Game Master của một trò chơi nhập vai tạo dàn ý IELTS. 
-            Đề bài IELTS Writing Task 2 là: "{st.session_state.topic}"
-            
-            Người chơi đã đi qua 3 trạm và thu thập được các insight sau:
-            1. Góc độ Vi mô (Cá nhân): {st.session_state.micro_ans}
-            2. Góc độ Trung mô (Tổ chức/Doanh nghiệp): {st.session_state.meso_ans}
-            3. Góc độ Vĩ mô (Chính phủ/Xã hội): {st.session_state.macro_ans}
-            
-            Nhiệm vụ của bạn:
-            1. Mở đầu bằng một câu chúc mừng người chơi bằng giọng điệu hào hùng của Game Master.
-            2. Tổng hợp 3 ý tưởng trên thành một Dàn ý (Outline) chi tiết và logic cho bài IELTS Essay. 
-            3. Giữ nguyên cốt lõi ý tưởng của người chơi nhưng nâng cấp từ vựng học thuật (cung cấp kèm một số cụm từ vựng - lexical resource gợi ý).
-            4. Trình bày rõ ràng bằng tiếng Việt, đan xen tiếng Anh cho các thuật ngữ IELTS.
-            """
-            
-            with st.spinner('Đang rèn đúc vũ khí...'):
-                response = model.generate_content(prompt)
-                
-            st.write(response.text)
-            
-        except Exception as e:
-            st.error(f"Có lỗi xảy ra khi gọi AI: {e}")
+    st.info("Game Master is forging your fragments into a master outline...")
+    
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    prompt = f"""
+    You are the Game Master. The user has completed the RPG for this IELTS topic: "{st.session_state.topic}"
+    
+    Their insights:
+    1. Micro ({st.session_state.roles['micro']['role']}): {st.session_state.micro_ans}
+    2. Meso ({st.session_state.roles['meso']['role']}): {st.session_state.meso_ans}
+    3. Macro ({st.session_state.roles['macro']['role']}): {st.session_state.macro_ans}
+    
+    Task:
+    Synthesize these into a highly logical, detailed IELTS Essay Outline in English. 
+    Include advanced vocabulary (Lexical Resource) suggestions based on their input.
+    """
+    
+    try:
+        with st.spinner('Forging outline...'):
+            response = model.generate_content(prompt)
+        st.write(response.text)
+    except Exception as e:
+        st.error(f"Error calling AI: {e}")
 
-        st.divider()
-        if st.button("🔄 Bắt đầu Hành trình Mới"):
-            reset_game()
-            st.rerun()
+    st.divider()
+    if st.button("🔄 Start a New Journey"):
+        reset_game()
+        st.rerun()
