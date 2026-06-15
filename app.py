@@ -8,7 +8,7 @@ from streamlit_lottie import st_lottie
 # --- CÀI ĐẶT TRANG ---
 st.set_page_config(page_title="The Analytical Journey", page_icon="🗡️", layout="centered")
 
-# --- HÀM TẢI ẢNH ĐỘNG (LOTTIE) CÓ BẢO VỆ CHỐNG LỖI ---
+# --- HÀM TẢI ẢNH ĐỘNG ---
 def load_lottieurl(url: str):
     try:
         r = requests.get(url, timeout=5)
@@ -18,7 +18,6 @@ def load_lottieurl(url: str):
     except:
         return None
 
-# Link ảnh động mới (đã được cập nhật link ổn định hơn)
 lottie_wizard = load_lottieurl("https://assets9.lottiefiles.com/packages/lf20_x1gjdldi.json") 
 lottie_castle = load_lottieurl("https://assets3.lottiefiles.com/packages/lf20_1yuvkgwz.json")
 
@@ -50,8 +49,9 @@ def reset_game():
         st.session_state[key] = ""
 
 # --- HÀM GỌI AI ---
+# Đã đổi tên model thành 'gemini-1.5-flash-latest' để chống lỗi NotFound
 def get_dynamic_roles(topic):
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
     prompt = f"""
     You are the Game Master of an RPG for IELTS Writing Task 2 idea generation.
     The topic is: "{topic}"
@@ -77,7 +77,7 @@ def get_dynamic_roles(topic):
     return None
 
 def get_ai_feedback(role, answer):
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
     prompt = f"""
     You are an encouraging Game Master. The user just answered a question from the perspective of a {role}.
     Their answer: "{answer}"
@@ -98,7 +98,6 @@ if not api_key:
 # TRẠM 0: NHẬP ĐỀ & TẠO VAI DIỄN (INIT)
 # ==========================================
 if st.session_state.stage == 0:
-    # KIỂM TRA TRƯỚC KHI HIỂN THỊ ẢNH ĐỂ TRÁNH LỖI
     if lottie_wizard:
         st_lottie(lottie_wizard, height=200, key="wizard_init")
         
@@ -212,7 +211,6 @@ elif st.session_state.stage == 3.5:
 elif st.session_state.stage == 4:
     st.balloons()
     
-    # KIỂM TRA TRƯỚC KHI HIỂN THỊ ẢNH ĐỂ TRÁNH LỖI
     if lottie_castle:
         st_lottie(lottie_castle, height=250, key="castle_end")
         
@@ -220,7 +218,7 @@ elif st.session_state.stage == 4:
     
     st.info("Game Master is forging your fragments into a master outline...")
     
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
     prompt = f"""
     You are the Game Master. The user has completed the RPG for this IELTS topic: "{st.session_state.topic}"
     
